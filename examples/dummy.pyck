@@ -1,0 +1,62 @@
+# -*- python -*-
+
+# Get minimal capabilities (for fast load)
+# All keys are mandatory
+def _get_capabilities():
+    return {
+        # Short pycake name
+        'name' : 'Dummy plugin',
+        # Version (use major.minor.build)
+        'version' : '1.0.0',
+        # A list of needed modules
+        'modules' : [],
+        # Instantiable class
+        'main_class' : DummyClass,
+        # Pycake type
+        'type' : PYCK_BOOTSTRAP,
+        # Priority (in case of many different pycakes with same versions)
+        # Minor numbers are higher priorities
+        'priority' : 0,
+        # Keywords for searching purposes
+        'tags' : ['dummy', 'skeleton'],
+        }
+
+# Get complete capabilities (in case of manager need to load the pycake)
+# Any extended key is mandatory
+def _get_extended_capabilities():
+    return {
+        # Exception classes
+        'exceptions' : [],
+        # Auxiliar classes
+        'alternates' : [],
+        # Brief pycake description
+        'long_description' : 'A skeleton for simple pycake',
+        # Pycake author
+        'author' : 'Tobias Diaz',
+        # Pycake contact info
+        'contact' : 'tobias.deb@gmail.com'
+        # URI to update pycake
+        'update_uri' : 'http://localhost/pycakes/dummy.pyck'
+        # Depends
+        # Are a list of dict (dict keys indicates dependency type)
+        'depends' : []
+        }
+
+# Check requeriments to use this pycake and return if successful   
+def _load():
+    return True
+
+# Things to do when manager unloads the pycake. Return if successful
+def _unload():
+    return True
+
+# Main class
+class DummyClass:
+    # It's recommended that constructor doesn't give any parameter
+    # Use setter methods to configure pycake environment if needed
+    def __init__(self):
+        pass
+
+    # A simple method
+    def sayHello(self):
+        print 'HELLO!'

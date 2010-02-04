@@ -1,0 +1,22 @@
+def _get_capabilities():
+    return {
+        'name' : 'Stdin/out simple plugin',
+        'maj_ver' : 1,
+        'min_ver' : 0,
+        'build' : 0,
+        'main_class' : SimpleStdUI,
+        'type' : UI,
+        'priority' : 0
+        }
+
+def _load():
+    return True
+
+def _unload():
+    return True
+
+## Plugin body
+class SimpleStdUI:
+    def __init__(self):
+        pass
+

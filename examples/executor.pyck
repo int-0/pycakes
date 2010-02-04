@@ -1,0 +1,33 @@
+import subprocess
+
+def _get_capabilities():
+    return {
+        'name' : 'External program executor',
+        'maj_ver' : 1,
+        'min_ver' : 0,
+        'build' : 0,
+        'main_class' : ExternalExecutor,
+        'type' : MAIN,
+        'priority' : 0
+        }
+
+def _load():
+    return True
+
+def _unload():
+    return True
+
+## Plugin body
+class ExternalExecutor:
+    def __init__(self):
+        pass
+
+    def run(self, cmd, parameters):
+        return subprocess.Popen([cmd] + parameters,
+                                stdout = subprocess.PIPE)
+
+    def run_wait(self, cmd, parameters):
+        retval = subprocess.Popen([cmd] + parameters,
+                                  stdout = subprocess.PIPE)
+        retval.wait()
+        return retval

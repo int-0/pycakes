@@ -1,0 +1,86 @@
+import sys
+import os
+import select
+import paramiko
+
+def _get_capabilities():
+    return {
+        'name' : 'SSH Transport Protocol',
+        'maj_ver' : 1,
+        'min_ver' : 0,
+        'build' : 0,
+        'main_class' : SSHTransport,
+        'type' : TRANSPORT_MAN,
+        'priority' : 0        
+        }
+
+def _load():
+    return True
+
+def _unload():
+    return True
+
+## Plugin body
+class SSHTransport:
+    def __init__(self):
+        self.__session = None
+        self.__connected = False
+        self.__connection_pair = ('127.0.0.1', 22)
+        self.__transport = None
+        self.__out = ''
+
+    def set_authentication(self, Session):
+        if not self.__connected:
+            self.__session = Session
+            return True
+        return False
+
+    def set_connection_pair(self, Connection):
+        if not self.__connected:
+            self.__connection_pair = Connection
+            return True
+        return False
+
+    def is_connected(self):
+        return self.__connected
+
+    def connect(self):
+        if not self.__connected:
+            if self.__session:
+                self.__transport = paramiko.Transport(self.__connection_pair)
+                self.__transport.connect(username=self.__session.get_user(),
+                                         password=self.__session.get_password())
+                self.__connected = True
+                return True
+        return False
+
+    def disconnect(self):
+        if self.__connected:
+            self.__transport.close()
+            self.__connected = False
+            return True
+        return False
+
+    def run(self, cmd):
+        if not self.__connected:
+            return False
+
+        chan = self.__transport.open_session()
+        chan.setblocking(0)
+        if not chan.exec_command(cmd):
+            return False
+        
+        while select.select([chan, ], [], []):
+            out = chan.recv(1024)
+            if not out:
+                break
+            self.__out += out
+            select.select([], [], [], .1)
+        
+        chan.close()
+        return True
+
+    def read(self):
+        retval = self.__out
+        self.__out = ''
+        return retval

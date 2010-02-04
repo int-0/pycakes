@@ -1,0 +1,44 @@
+def _get_capabilities():
+    return {
+        'name' : 'Simple user/password session',
+        'maj_ver' : 1,
+        'min_ver' : 0,
+        'build' : 0,
+        'main_class' : SimpleUserPass,
+        'type' : SESSION_MAN,
+        'priority' : 0        
+        }
+
+def _load():
+    return True
+
+def _unload():
+    return True
+
+## Plugin body
+class SimpleUserPass:
+    def __init__(self):
+        self.__user = ''
+        self.__password = ''
+
+    def set_session(self, User = None, Password = None):
+        if User:
+            self.__user = User
+        if Password:
+            self.__passord = Password
+
+    def get_session(self):
+        return ((self.__user, self.__password))
+
+    def set_user(self, user):
+        self.set_session(User=user)
+
+    def set_password(self, password):
+        self.set_session(Password=password)
+
+    def get_user(self):
+        return self.get_session()[0]
+
+    def get_password(self):
+        return self.get_password()[1]
+
