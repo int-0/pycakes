@@ -4,7 +4,13 @@ import os
 import sys
 import uuid
 
-execfile('pyckman_config')
+from types import *
+
+try:
+    execfile('pyckman_config')
+except:
+    # Defaults
+    pass
 
 global _load
 global _unload
@@ -20,6 +26,22 @@ class BadPyCake(Exception):
             return repr(self.__inf)
 
 class UnregisteredPyCake(Exception):
+    def __init__(self, inf):
+        Exception.__init__(self, inf)
+        self.__inf = inf
+
+        def __str__(self):
+            return repr(self.__inf)
+
+class PyCakeImportError(Exception):
+    def __init__(self, inf):
+        Exception.__init__(self, inf)
+        self.__inf = inf
+
+        def __str__(self):
+            return repr(self.__inf)
+
+class PyCakeClassesError(Exception):
     def __init__(self, inf):
         Exception.__init__(self, inf)
         self.__inf = inf
@@ -164,14 +186,103 @@ class PycakeManager(object):
             self.__registry = {}
             self.__loaded = {}
 
-            self.__pycake_file = {}
-            self.__instances = {}
+            # Absolute paths to registered modules
+            self.__pycake_files = {}
+            
+            # Garbage collector
+            self.__managed_modules = {}
 
-            self.__modules_instances = {
-                'os' : 1,
-                'sys' : 1,
-                'uuid' : 1
-                }
+            self.__managed_classes = {}
+
+        ### Modules operations ###
+
+        # Modules are passed as normal strings
+        def __load_module(self, module):
+            try:
+                exec('import ' + module)
+            except:
+                raise PyCakeImportError('Fail to import: ' + module)
+            return True
+
+        def __unload_module(self, module):
+            try:
+                exec('del(' + module + ')')
+            except:
+                raise PyCakeImportError('Fail to unload: ' + module)
+            return True
+
+        def __get_all_loaded_modules(self):
+            modules = []
+            for item in globals().keys():
+                if type(item) == ModuleType:
+                    modules.append(item)
+            return modules
+        
+        def __unused_module_collector(self):
+            unused = []
+            for module in self.__managed_modules.keys():
+                if self.__managed_modules[module] <= 0:
+                    unused.append(module)
+            for module in unused:
+                self.__unload_module(module)
+                del(self.__imodules[module])
+
+        ### Managed Classes operations ###
+
+        def __get_class_from_name(self, class_name):
+            if type(class_name) in StringTypes:
+                for loaded_class in self.__managed_classes.keys():
+                    if loaded_class.__name__ == class_name:
+                        return loaded_class
+
+        def __refresh_loaded_classes(self, classes):
+            if type(classes) == ListType:
+                for loaded_class in classes:
+                    if not self.__managed_classes.has_key(loaded_class):
+                        self.__managed_classes[loaded_class] = 0
+                    self.__managed_classes[loaded_class] += 1
+            else:
+                if not self.__managed_classes.has_key(classes):
+                    self.__managed_classes[classes] = 1
+                else:
+                    self.__managed_classes[classes] += 1
+
+        def __refresh_unloaded_classes(self, classes):
+            if type(classes) == ListType:
+                for loaded_class in classes:
+                    if not self.__managed_classes.has_key(loaded_class):
+                        raise PyCakeClassesError('Request to unload unmanaged class: ' + repr(loaded_class))
+                    self.__managed_classes[loaded_class] -= 1
+            else:
+                if not self.__managed_classes.has_key(classes):
+                    raise PyCakeClassesError('Request to unload unmanaged class: ' + repr(classes))
+                self.__managed_classes[classes] -= 1
+
+        def __unused_classes_collector(self):
+            unused = []
+            for managed_class in self.__managed_classes.keys():
+                if self.__managed_classes[managed_class] <= 0:
+                    unused.append(managed_class)
+            for managed_class in unused:
+                del(managed_class)
+                del(self.__managed_classes[managed_class])
+
+        def __get_all_loaded_classes(self):
+            classes = []
+            for item in globals().keys():
+                if type(item) == ClassType:
+                    classes.append(item)
+            return classes
+
+        ### Basic pycakes operations ###
+
+        # TODO: FIXME: BUG: #
+        def __get_capabilities_of(self, pycake_file):
+            pass
+
+        # TODO: FIXME: BUG: #
+        def __get_extended_capabilities_of(self, pycake_file):
+            pass
 
         def __uuid_of(pycake_file):
             files = dict([(v, k) for (k, v) in self.__pycake_file.iteritems()])
