@@ -10,7 +10,12 @@ try:
     execfile('pyckman_config')
 except:
     # Defaults
-    pass
+    PYCK_SAFE_INTERFACES = False
+    PYCK_MODULE_GARBAGE_COLLECTOR = True
+    PYCK_FORCE_DEPENDS = False
+    PYCK_BOOTSTRAP_LOAD = []
+    PYCK_FORCE_AT_LEAST_ONE = []
+    PYCK_FORCE_ONLY_ONE = []
 
 global _load
 global _unload
@@ -48,58 +53,6 @@ class PyCakeClassesError(Exception):
 
         def __str__(self):
             return repr(self.__inf)
-
-def get_pycake_caps(pycake_name):
-    if not os.path.isfile(pycake_name):
-        raise BadPyCake('File not found: ' + pycake_name)
-
-    global _get_capabilities
-    global _get_extended_capabilities
-    _get_capabilities = None
-    _get_extended_capabilities = None
-
-    try:
-        execfile(pycake_name, globals())
-        if not callable(_get_capabilities):
-            raise BadPlugin('"get_capabilities()" method not found in PyCake: '
-                            + pycake_name)
-        caps = _get_capabilities()
-        if callable(_get_extended_capabilities):
-            extra_caps = _get_extended_capabilities()
-        else:
-            extra_caps = {}
-
-        # Clear classes
-        if not caps.has_key('main_class'):
-            raise BadPlugin('Mandatory key "main_class" not found in PyCake: '
-                            + pycake_name)
-        del(caps['main_class'])
-        if extra_caps.has_key('exceptions'):
-            for single_exception in extra_caps['exceptions']:
-                del(single_exception)
-        if extra_caps.has_key('alternates'):
-            for single_class in extra_caps['alternates']:
-                del(single_class)
-    except:
-        raise BadPyCake('Unknown exception: ' + sys.last_traceback)
-    return (caps, extra_caps)
-
-def load_pycake(plug_name):
-    if not valid_plugin(plug_name):
-        raise BadPlugin('Not a valid plugin: ' + plug_name)
-    global _load
-    global _get_capabilities
-    global _get_extended_capabilities
-    _load = None
-    execfile(plug_name, globals())
-    retvalue = _load()
-
-    # Clear plugin space
-    # (keep main_class and _get_capabilities)
-    _load = None
-    _unload = None
-
-    return retvalue
 
 def unload_pycake(plug_name):
     if not valid_plugin(plug_name):
@@ -184,40 +137,41 @@ class PycakeManager(object):
     class Implementation:
         def __init__(self):
             self.__registry = {}
-            self.__loaded = {}
+            self.__classes = {}
 
             # Absolute paths to registered modules
             self.__pycake_files = {}
             
-            # Garbage collector
+            # Module Garbage collector
             self.__managed_modules = {}
 
-            self.__managed_classes = {}
-
-        ### Modules operations ###
-
-        # Modules are passed as normal strings
-        def __load_module(self, module):
-            try:
-                exec('import ' + module)
-            except:
-                raise PyCakeImportError('Fail to import: ' + module)
-            return True
-
-        def __unload_module(self, module):
-            try:
-                exec('del(' + module + ')')
-            except:
-                raise PyCakeImportError('Fail to unload: ' + module)
-            return True
-
+        ### Un-managed modules operations ###
+        # FIXME: not needed?
         def __get_all_loaded_modules(self):
             modules = []
             for item in globals().keys():
                 if type(item) == ModuleType:
                     modules.append(item)
             return modules
-        
+       
+        ### Modules operations ###
+        # (Modules are passed as normal strings)
+
+        def __load_module(self, module):
+            try:
+                exec('import ' + module)
+            except:
+                raise PyCakeImportError('Fail to import: ' + module)
+
+        def __unload_module(self, module):
+            if not PYCK_MODULE_GARBAGE_COLLECTOR:
+                return
+            try:
+                exec('del(' + module + ')')
+            except:
+                raise PyCakeImportError('Fail to unload: ' + module)
+
+        # FIXME: unused?
         def __unused_module_collector(self):
             unused = []
             for module in self.__managed_modules.keys():
@@ -225,47 +179,43 @@ class PycakeManager(object):
                     unused.append(module)
             for module in unused:
                 self.__unload_module(module)
-                del(self.__imodules[module])
+                del(self.__managed_modules[module])
 
-        ### Managed Classes operations ###
+        def managed_import(self, module):
+            # Already loaded?
+            if module in self.__managed_modules.keys():
+                self.__managed_modules[module] += 1
+                return
+            self.__load_module(module)
+            self.__managed_modules[module] = 1
+
+        def managed_unimport(self, module):
+            if module in self.__managed_modules.keys():
+                self.__managed_modules[module] -= 1
+                if self.__managed_modules[module] == 0:
+                    self.__unload_module(module)
+                return
+            raise PyCakeImportError('Try to unload not loaded module: ' +
+                                    module)
+            
+        ### Classes operations ###
+
+        def __unload_class(self, class_name):
+            try:
+                if type(class_name) in StringTypes:
+                    exec('del(' + class_name + ')')
+                else:
+                    del(class_name)
+                return True
+            except:
+                return False
 
         def __get_class_from_name(self, class_name):
             if type(class_name) in StringTypes:
-                for loaded_class in self.__managed_classes.keys():
-                    if loaded_class.__name__ == class_name:
-                        return loaded_class
-
-        def __refresh_loaded_classes(self, classes):
-            if type(classes) == ListType:
-                for loaded_class in classes:
-                    if not self.__managed_classes.has_key(loaded_class):
-                        self.__managed_classes[loaded_class] = 0
-                    self.__managed_classes[loaded_class] += 1
-            else:
-                if not self.__managed_classes.has_key(classes):
-                    self.__managed_classes[classes] = 1
-                else:
-                    self.__managed_classes[classes] += 1
-
-        def __refresh_unloaded_classes(self, classes):
-            if type(classes) == ListType:
-                for loaded_class in classes:
-                    if not self.__managed_classes.has_key(loaded_class):
-                        raise PyCakeClassesError('Request to unload unmanaged class: ' + repr(loaded_class))
-                    self.__managed_classes[loaded_class] -= 1
-            else:
-                if not self.__managed_classes.has_key(classes):
-                    raise PyCakeClassesError('Request to unload unmanaged class: ' + repr(classes))
-                self.__managed_classes[classes] -= 1
-
-        def __unused_classes_collector(self):
-            unused = []
-            for managed_class in self.__managed_classes.keys():
-                if self.__managed_classes[managed_class] <= 0:
-                    unused.append(managed_class)
-            for managed_class in unused:
-                del(managed_class)
-                del(self.__managed_classes[managed_class])
+                for pycake in self.__classes.keys():
+                    for single_class in self.__classes[pycake]:
+                        if class_name == single_class.__name__:
+                            return single_class
 
         def __get_all_loaded_classes(self):
             classes = []
@@ -276,14 +226,91 @@ class PycakeManager(object):
 
         ### Basic pycakes operations ###
 
-        # TODO: FIXME: BUG: #
         def __get_capabilities_of(self, pycake_file):
-            pass
+            if not os.path.isfile(pycake_file):
+                raise BadPyCake('File not found: ' + pycake_file)
 
-        # TODO: FIXME: BUG: #
-        def __get_extended_capabilities_of(self, pycake_file):
-            pass
+            global _get_capabilities
+            global _get_extended_capabilities
+            _get_capabilities = None
+            _get_extended_capabilities = None
+            try:
+                execfile(pycake_name, globals())
+                if not callable(_get_capabilities):
+                    raise BadPlugin('"get_capabilities()" mandatory method not found in PyCake: ' + pycake_name)
+                caps = _get_capabilities()
+                if not callable(_get_extended_capabilities):
+                    extra_caps = {}
+                else:
+                    extra_caps = _get_extended_capabilities()
 
+                # Clear classes
+                if not caps.has_key('main_class'):
+                    raise BadPlugin('Mandatory key "main_class" not found in PyCake caps: ' + pycake_name)
+                self.__del_class(caps['main_class'])
+
+                # Clear Exceptions
+                if extra_caps.has_key('exceptions'):
+                    for single_exception in extra_caps['exceptions']:
+                        self.__del_class(single_exception)
+
+                # Clear aux. classes
+                if extra_caps.has_key('alternates'):
+                    for single_class in extra_caps['alternates']:
+                        self.__del_class(single_class)
+            except:
+                raise BadPyCake('Unknown exception: ' + sys.last_traceback)
+            return caps.update(extra_caps)
+
+        def __load_pycake_space(self, pycake_file):
+            global _load
+            _load = None
+            try:
+                execfile(pycake_name, globals())
+                # Pre-load
+                if callable(_load):
+                    result = _load()
+                else:
+                    result = True
+                # Clear plugin space
+                _load = None
+                _unload = None
+                _get_capabilities = None
+                _get_extended_capabilities = None
+                return retvalue
+            except:
+                raise BadPyCake('Unknown exception during load of ' +
+                                pycake_name + '(' + sys.last_traceback + ')')
+
+        def load_pycake(self, pycake_id):
+            if not pycake_id in self.__pycake_file.keys():
+                raise UnregisteredPyCake('Try to load unregistered pycake (' +
+                                         str(pycake_id) + ')')
+
+            # FIXME: *** Test for pycake depends!!! ***
+
+            # Import needed modules
+            if caps.has_key('modules'):
+                for module in caps['modules']:
+                    self.managed_import(module)
+            # Load classes
+            if self.__load_pycake_space(self.__pycake_file[pycake_id]):
+                # Refresh class map
+                caps = self.__registry[pycake_id]
+                self.__classes[pycake_id] = [caps['main_class']]
+                if caps.has_key('alternates'):
+                    self.__classes[pycake_id] += caps['alternates']
+                if caps.has_key('exceptions'):
+                    self.__classes[pycake_id] += caps['exceptions']
+                return True
+            else:
+                # Unload modules
+                if caps.has_key('modules'):
+                    for module in caps['modules']:
+                        self.managed_unimport(module)
+                # FIXME: raise an exception? unload classes?
+                return False
+            
         def __uuid_of(pycake_file):
             files = dict([(v, k) for (k, v) in self.__pycake_file.iteritems()])
             if file.has_key(pycake_id):
